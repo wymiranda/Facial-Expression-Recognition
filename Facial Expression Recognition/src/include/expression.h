@@ -1,11 +1,8 @@
 #pragma once
 
-
-
-class ExpressionDetector {
+class expression {
 
 private:
-	
 	
 	full_object_detection faceLandmarks;
 	
@@ -29,7 +26,9 @@ private:
 	void drawFace(Mat &img);
 
 public:
-	ExpressionDetector(cv::Mat& image, full_object_detection faceLandmarks_);
+	expression();
+	expression(cv::Mat& image, full_object_detection faceLandmarks_);
+	Mat getFeatures();
 };
 
 

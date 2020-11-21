@@ -12,20 +12,18 @@ using namespace cv;
 using namespace dlib;
 
 #include "include/splines.h"
-#include "include/ExpressionDetector.h"
+#include "include/expression.h"
+#include "include/detector.h"
 
 int main() {
+
 	Mat frame;
-	VideoCapture cam("../files/video/girl2.mp4");
 
-	frontal_face_detector detector;
-	full_object_detection faceLandmarks;
-	detector = get_frontal_face_detector();
-	std::vector<dlib::rectangle> faceRects;
+	detector expressionDetector;
 	
-	shape_predictor landmarkDetector;
-	deserialize("../files/data/predictor_face_landmarks.dat") >> landmarkDetector;
-
+	expressionDetector.train();
+	std::cin.get();
+	/*
 	while (1) {
 		cam >> frame;
 		if (frame.empty()) break;
@@ -36,12 +34,12 @@ int main() {
 			
 			for (int i = 0; i < faceRects.size(); i++) {
 				faceLandmarks = landmarkDetector(dlib_frame, faceRects[i]);
-				ExpressionDetector expression_detector(frame, faceLandmarks);
+				expression Expression(frame, faceLandmarks);
 			}
 
 			cv::imshow("VIDEO", frame);
 			waitKey(1);
 	}
 
-	return 0;
+	return 0;*/
 }

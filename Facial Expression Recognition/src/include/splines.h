@@ -13,7 +13,7 @@ private:
 	Eigen::VectorXd X_x, X_y, B_x, B_y;		// AX=B, temos de fazer os cálculos para x e para y
 	Eigen::VectorXd h;						// h é o vetor que contém "t(i) - t(i-1)"
 	Eigen::MatrixXd xCoeff, yCoeff;			// Coeficientes dos polinômios
-
+	Mat cvCoeff;
 public:
 	spline();
 	spline(Eigen::VectorXd x, Eigen::VectorXd y);
@@ -65,5 +65,7 @@ public:
 	/// </summary>
 	/// <param name="img">imagem onde serão desenhadas as splines </param>
 	void drawSplines(Mat& img);
+
+	Mat getCoefficients();
 };
 

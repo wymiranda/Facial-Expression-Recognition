@@ -9,26 +9,26 @@
 #include <dlib/image_processing.h>
 #include <dlib/image_processing/frontal_face_detector.h>
 
+using namespace std;
 using namespace cv;
 using namespace dlib;
 
 #include "include/splines.h"
-#include "include/ExpressionDetector.h"
+#include "include/expression.h"
 
-ExpressionDetector::ExpressionDetector(cv::Mat &image, full_object_detection faceLandmarks_) {
-	
+expression::expression() {}
 
+expression::expression(cv::Mat &image, full_object_detection faceLandmarks_) {
 	cv_image<bgr_pixel> dlib_image(image);
 	setLandmarks(faceLandmarks_);
 	setSplines();
-	drawFace(image);
 }
 
-void ExpressionDetector::setLandmarks(full_object_detection faceLandmarks_) {
+void expression::setLandmarks(full_object_detection faceLandmarks_) {
 	faceLandmarks = faceLandmarks_;
 }
 
-void ExpressionDetector::setPoints(int init, int size, spline &s, int other = 0) {
+void expression::setPoints(int init, int size, spline &s, int other = 0) {
 	Eigen::VectorXd x;
 	Eigen::VectorXd y;
 	x = Eigen::VectorXd::Zero(size);
@@ -50,9 +50,9 @@ void ExpressionDetector::setPoints(int init, int size, spline &s, int other = 0)
 	s = spline(x, y);
 }
 
-void ExpressionDetector::setSplines() {
+void expression::setSplines() {
 
-	setPoints(0, 16, jaw);
+	setPoints(0, 17, jaw);
 	setPoints(17, 5, leftEyebrown);
 	setPoints(22, 5, rightEyebrown);
 	setPoints(27, 4, nasalBridge);
@@ -68,7 +68,7 @@ void ExpressionDetector::setSplines() {
 
 }
 
-void ExpressionDetector::drawFace(Mat &img) {
+void expression::drawFace(Mat &img) {
 	jaw.drawSplines(img);
 	leftEyebrown.drawSplines(img);
 	rightEyebrown.drawSplines(img);
@@ -82,4 +82,24 @@ void ExpressionDetector::drawFace(Mat &img) {
 	outerLowerLip.drawSplines(img);
 	innerUpperLip.drawSplines(img);
 	innerLowerLip.drawSplines(img);
+}
+
+Mat expression::getFeatures() {
+	cv::Mat features;
+
+	features = jaw.getCoefficients();
+	hconcat(features, leftEyebrown.getCoefficients(), features);
+	hconcat(features, rightEyebrown.getCoefficients(), features);
+	hconcat(features, nasalBridge.getCoefficients(), features);
+	hconcat(features, nose.getCoefficients(), features);
+	hconcat(features, leftUpperEye.getCoefficients(), features);
+	hconcat(features, leftLowerEye.getCoefficients(), features);
+	hconcat(features, rightUpperEye.getCoefficients(), features);
+	hconcat(features, rightLowerEye.getCoefficients(), features);
+	hconcat(features, outerUpperLip.getCoefficients(), features);
+	hconcat(features, outerLowerLip.getCoefficients(), features);
+	hconcat(features, innerUpperLip.getCoefficients(), features);
+	hconcat(features, innerLowerLip.getCoefficients(), features);
+
+	return features;
 }

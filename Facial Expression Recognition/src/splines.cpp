@@ -107,3 +107,13 @@ void spline::drawSplines(Mat& img) {
 }
 
 
+Mat spline::getCoefficients() {
+	cvCoeff = cv::Mat::zeros(1, N * 2 * 4, CV_32FC1);
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < 4; j++) {
+			cvCoeff.at<float>(4*i + j) = xCoeff(i, j);
+			cvCoeff.at<float>(4*N + 4*i + j) = yCoeff(i, j);
+		}
+	}
+	return cvCoeff;
+}
