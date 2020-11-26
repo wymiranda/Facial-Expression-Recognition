@@ -23,12 +23,13 @@ private:
 	void setLandmarks(full_object_detection faceLandmarks);
 	void setPoints(int init, int size, spline& s, int other);
 	void setSplines();
-	void drawFace(Mat &img);
+	
 
 public:
 	expression();
 	expression(cv::Mat& image, full_object_detection faceLandmarks_);
 	Mat getFeatures();
+	void drawFace(Mat& img);
 };
 
 

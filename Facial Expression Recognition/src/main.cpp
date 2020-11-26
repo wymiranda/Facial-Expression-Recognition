@@ -17,11 +17,10 @@ using namespace dlib;
 
 int main() {
 
-	Mat frame;
-
 	detector expressionDetector;
 	
 	expressionDetector.train();
+	expressionDetector.test();
 	std::cin.get();
 	/*
 	while (1) {
@@ -40,6 +39,6 @@ int main() {
 			cv::imshow("VIDEO", frame);
 			waitKey(1);
 	}
-
-	return 0;*/
+	*/
+	return 0;
 }
