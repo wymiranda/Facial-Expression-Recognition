@@ -85,9 +85,10 @@ void expression::drawFace(Mat &img) {
 }
 
 Mat expression::getFeatures() {
-	cv::Mat features;
 
 	features = jaw.getCoefficients();
+
+	
 	hconcat(features, leftEyebrown.getCoefficients(), features);
 	hconcat(features, rightEyebrown.getCoefficients(), features);
 	hconcat(features, nasalBridge.getCoefficients(), features);

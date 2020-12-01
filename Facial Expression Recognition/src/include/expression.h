@@ -5,7 +5,8 @@ class expression {
 private:
 	
 	full_object_detection faceLandmarks;
-	
+	Mat features;
+
 	spline jaw;				//jaw: maxilar
 	spline leftEyebrown;	//left eyebrown: sobrancelha esquerda
 	spline rightEyebrown;	//right eyebrown: sobrancelha direita

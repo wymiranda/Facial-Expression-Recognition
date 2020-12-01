@@ -3,17 +3,19 @@
 class detector
 {
 private:
-	int nclasses = 5; //Número de saídas
+	int nclasses = 6; //Número de saídas
 	shape_predictor landmarkDetector;
-	std::vector<full_object_detection> faceLandmarks;
 	frontal_face_detector faceDetector;
-	expression facialExpression;
+	typedef std::vector<dlib::rectangle> DLIBRects;
+	typedef cv_image<bgr_pixel> DLIBImage;
 
+	HOGDescriptor* hog;
 	Ptr<ml::ANN_MLP> ann;
 	Ptr<ml::SVM> svm;
 
-	void setExpression(expression& facialExpression_);
-	void getLandmarks(Mat image);
+	void init();
+	Rect dlibRectToOpenCV(dlib::rectangle r);
+	void getLandmarks(full_object_detection& flNormalized, DLIBImage dlibImg, dlib::rectangle r);
 	void saveTrain();
 public:
 	detector();
