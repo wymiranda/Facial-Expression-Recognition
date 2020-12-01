@@ -3,15 +3,15 @@
 class detector
 {
 private:
-	int nclasses = 6; //Número de saídas
+	int nclasses;
 	shape_predictor landmarkDetector;
 	frontal_face_detector faceDetector;
 	typedef std::vector<dlib::rectangle> DLIBRects;
 	typedef cv_image<bgr_pixel> DLIBImage;
 
 	HOGDescriptor* hog;
-	Ptr<ml::ANN_MLP> ann;
-	Ptr<ml::SVM> svm;
+	Ptr<ml::ANN_MLP> ann, annGeometric, annApparence;
+	Ptr<ml::SVM> svm, svmGeometric, svmApparence;
 
 	void init();
 	Rect dlibRectToOpenCV(dlib::rectangle r);

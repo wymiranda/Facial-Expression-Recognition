@@ -26,41 +26,92 @@ detector::detector() {
 }
 
 void detector::init() {
-
 	//Inicialização do descritor hog
-	hog = new HOGDescriptor(Size(128, 128), Size(32, 32), Size(16, 16), Size(16, 16), 9, 1);
+
+	nclasses = 4; //Número de saídas
+	Size win = Size(128, 128);
+	Size block = Size(16, 16);
+	Size stride = Size(8, 8);
+	Size cell = Size(8, 8);
+	int bins = 7;
+
+	hog = new HOGDescriptor(win, block, stride, cell, bins);
 
 	//Inicialização do SVM
 	svm = ml::SVM::create();
-
 	svm->setType(ml::SVM::C_SVC);
+	svm->setC(10);
+	svm->setGamma(0.001);
 	svm->setKernel(ml::SVM::INTER);
-	svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 1000, 1e-5));
+	svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
+
+	svmGeometric = ml::SVM::create();
+	svmGeometric->setType(ml::SVM::C_SVC);
+	svmGeometric->setC(10);
+	svmGeometric->setGamma(0.001);
+	svmGeometric->setKernel(ml::SVM::INTER);
+	svmGeometric->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
+
+
+	svmApparence = ml::SVM::create();
+	svmApparence->setType(ml::SVM::C_SVC);
+	svmApparence->setC(10);
+	svmApparence->setGamma(0.001);
+	svmApparence->setKernel(ml::SVM::INTER);
+	svmApparence->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
 
 	//Inicialização da rede neural mlp
+	int geometricFeatures = 63 * 4 * 2;
+	int apparenceFeatures = ((win.width / cell.width) - 1) * ((win.width / cell.width) - 1) * 4 * bins;
+
 	ann = ml::ANN_MLP::create();
 	Mat_<int> layers(4, 1);
-
-	int nfeatures = 63 * 4 * 2 + 7*7*4*9;
-	layers(0) = nfeatures;
+	layers(0) = geometricFeatures + apparenceFeatures;
 	layers(1) = nclasses * 32;
 	layers(2) = nclasses * 16;
 	layers(3) = nclasses;
-
 	ann->setLayerSizes(layers);
 	ann->setActivationFunction(ml::ANN_MLP::SIGMOID_SYM, 0, 0);
 	ann->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 100, 1e-3));
 	ann->setTrainMethod(ml::ANN_MLP::BACKPROP, 0.0001);
+
+	
+	annGeometric = ml::ANN_MLP::create();
+	Mat_<int> layersGeo(4, 1);
+	layersGeo(4, 1);
+	layersGeo(0) = geometricFeatures;
+	layersGeo(1) = nclasses * 32;
+	layersGeo(2) = nclasses * 16;
+	layersGeo(3) = nclasses;
+	annGeometric->setLayerSizes(layersGeo);
+	annGeometric->setActivationFunction(ml::ANN_MLP::SIGMOID_SYM, 0, 0);
+	annGeometric->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 100, 1e-3));
+	annGeometric->setTrainMethod(ml::ANN_MLP::BACKPROP, 0.0001);
+	
+	
+	
+	annApparence = ml::ANN_MLP::create();
+	Mat_<int> layersApp(4, 1);
+	layersApp(4, 1);
+	layersApp(0) = apparenceFeatures;
+	layersApp(1) = nclasses * 32;
+	layersApp(2) = nclasses * 16;
+	layersApp(3) = nclasses;
+	annApparence->setLayerSizes(layersApp);
+	annApparence->setActivationFunction(ml::ANN_MLP::SIGMOID_SYM, 0, 0);
+	annApparence->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 100, 1e-3));
+	annApparence->setTrainMethod(ml::ANN_MLP::BACKPROP, 0.0001);
+	
 }
 
 void detector::train() {
 
 	init();
 
-	std::string path = "../datas/images/DBs/Yale/train";
+	std::string path = "../datas/images/DBs/mydb/train";
 
-	Mat trainData; // entrada para trinamento
 	Mat trainClassesMLP, trainClassesSVM; // saída esperada
+	Mat geometricFeatures, apparenceFeatures;
 
 	int cont = 0;
 	for (const auto& entry : fs::directory_iterator(path)) {
@@ -89,23 +140,26 @@ void detector::train() {
 		}
 
 		for (int i = 0; i < dlibRects.size(); i++){
-			Mat geometricFeatures; 
+			
+			std::vector<float> descriptor;
+			Rect r = dlibRectToOpenCV(dlibRects[i]);
+			if (r.x + r.width > img.cols || r.y + r.height > img.rows) {
+				cout << "PROBLEM--" << file << endl;
+				break;
+			}
+			Mat resizedImg = img(r);
+			cv::resize(resizedImg, resizedImg, Size(128, 128), 0, 0, INTER_CUBIC);
+			hog->compute(resizedImg, descriptor);
+			Mat aux(1, descriptor.size(), cv::DataType<float>::type, descriptor.data());
+			apparenceFeatures.push_back(aux);
+
 			full_object_detection landmarks;
 			getLandmarks(landmarks, dlibImg, dlibRects[i]);
 			expression facialExpression = expression(img, landmarks);
-			geometricFeatures = facialExpression.getFeatures();
+			geometricFeatures.push_back(facialExpression.getFeatures());
 
-			std::vector<float> descriptor;
-			Rect r = dlibRectToOpenCV(dlibRects[i]);
-			Mat resizedImg;
-			cv::resize(img, resizedImg, Size(128, 128));
-			hog->compute(resizedImg, descriptor);
-			Mat apparenceFeatures(1, descriptor.size(), cv::DataType<float>::type, descriptor.data());
-
-
-			Mat features;
-			hconcat(apparenceFeatures, geometricFeatures, features);
-			trainData.push_back(features);
+			Mat m(200, 200, CV_8UC3, Scalar(0));
+			facialExpression.drawFace(m);
 
 			trainClassesMLP.push_back(Mat::zeros(1, nclasses, CV_32F));
 			trainClassesSVM.push_back(Mat::zeros(1, 1, CV_32S));
@@ -122,25 +176,48 @@ void detector::train() {
 				trainClassesMLP.at<float>(cont, 2) = 1;
 				trainClassesSVM.at<int>(cont, 0) = 2;
 			}
-			else if (file.find("sleepy") != std::string::npos) {
+			else if (file.find("surprised") != std::string::npos) {
 				trainClassesMLP.at<float>(cont, 3) = 1;
 				trainClassesSVM.at<int>(cont, 0) = 3;
-			}
-			else if (file.find("surprised") != std::string::npos) {
+			}/*
+			else if (file.find("fear") != std::string::npos) {
 				trainClassesMLP.at<float>(cont, 4) = 1;
 				trainClassesSVM.at<int>(cont, 0) = 4;
-			}else if (file.find("wink") != std::string::npos) {
+			}else if (file.find("joy") != std::string::npos) {
 				trainClassesMLP.at<float>(cont, 5) = 1;
 				trainClassesSVM.at<int>(cont, 0) = 5;
 			}
+			else if (file.find("neutral") != std::string::npos) {
+				trainClassesMLP.at<float>(cont, 6) = 1;
+				trainClassesSVM.at<int>(cont, 0) = 6;
+			}
+			else if (file.find("pride") != std::string::npos) {
+				trainClassesMLP.at<float>(cont, 7) = 1;
+				trainClassesSVM.at<int>(cont, 0) = 7;
+			}
+			else if (file.find("sad") != std::string::npos) {
+				trainClassesMLP.at<float>(cont, 8) = 1;
+				trainClassesSVM.at<int>(cont, 0) = 8;
+			}
+			else if (file.find("surprised") != std::string::npos) {
+				trainClassesMLP.at<float>(cont, 9) = 1;
+				trainClassesSVM.at<int>(cont, 0) = 9;
+			}*/
 			
 		}
-		
 		cont++;
 	}
 
-	svm->train(trainData, ml::ROW_SAMPLE, trainClassesSVM);
-	ann->train(trainData, ml::ROW_SAMPLE, trainClassesMLP);
+	annGeometric->train(geometricFeatures, ml::ROW_SAMPLE, trainClassesMLP);
+	annApparence->train(apparenceFeatures, ml::ROW_SAMPLE, trainClassesMLP);
+	svmGeometric->train(geometricFeatures, ml::ROW_SAMPLE, trainClassesSVM);
+	svmApparence->train(apparenceFeatures, ml::ROW_SAMPLE, trainClassesSVM);
+
+	Mat features;
+	hconcat(apparenceFeatures, geometricFeatures, features);
+	
+	svm->train(features, ml::ROW_SAMPLE, trainClassesSVM);
+	ann->train(features, ml::ROW_SAMPLE, trainClassesMLP);
 	
 	//saveTrain();
 }
@@ -152,8 +229,9 @@ void detector::saveTrain() {
 
 void detector::test() {
 
-	std::string path = "../datas/images/DBs/Yale/test";
-	Mat testData;
+	std::string path = "../datas/images/DBs/mydb/test";
+
+	Mat geometricFeatures, apparenceFeatures;
 	Mat testLabels;
 	
 	for (const auto& entry : fs::directory_iterator(path)) {
@@ -175,22 +253,23 @@ void detector::test() {
 
 		for (int i = 0; i < dlibRects.size(); i++) {
 
-			Mat geometricFeatures;
+			std::vector<float> descriptor;
+			Rect r = dlibRectToOpenCV(dlibRects[i]);
+			if (r.x + r.width > img.cols || r.y + r.height > img.rows) {
+				cout << "PROBLEM--" << file << endl;
+				break;
+			}
+			Mat resizedImg = img(r);
+			cv::resize(resizedImg, resizedImg, Size(128, 128), 0, 0, INTER_CUBIC);
+			hog->compute(resizedImg, descriptor);
+			Mat aux(1, descriptor.size(), cv::DataType<float>::type, descriptor.data());
+			apparenceFeatures.push_back(aux);
+			
 			full_object_detection landmarks;
 			getLandmarks(landmarks, dlibImg, dlibRects[i]);
 			expression facialExpression = expression(img, landmarks);
-			geometricFeatures = facialExpression.getFeatures();
+			geometricFeatures.push_back(facialExpression.getFeatures());
 
-			std::vector<float> descriptor;
-			Rect r = dlibRectToOpenCV(dlibRects[i]);
-			Mat resizedImg;
-			cv::resize(img, resizedImg, Size(128, 128));
-			hog->compute(resizedImg, descriptor);
-			Mat apparenceFeatures(1, descriptor.size(), cv::DataType<float>::type, descriptor.data());
-
-			Mat features;
-			hconcat(apparenceFeatures, geometricFeatures, features);
-			testData.push_back(features);
 
 			if (file.find("happy") != std::string::npos) {
 				testLabels.push_back(0);
@@ -201,49 +280,112 @@ void detector::test() {
 			else if (file.find("sad") != std::string::npos) {
 				testLabels.push_back(2);
 			}
-			else if (file.find("sleepy") != std::string::npos) {
-				testLabels.push_back(3);
-			}
 			else if (file.find("surprised") != std::string::npos) {
+				testLabels.push_back(3);
+			}/*
+			else if (file.find("fear") != std::string::npos) {
 				testLabels.push_back(4);
 			}
-			else if (file.find("wink") != std::string::npos) {
+			else if (file.find("joy") != std::string::npos) {
 				testLabels.push_back(5);
 			}
+			else if (file.find("neutral") != std::string::npos) {
+				testLabels.push_back(6);
+			}
+			else if (file.find("pride") != std::string::npos) {
+				testLabels.push_back(7);
+			}
+			else if (file.find("sad") != std::string::npos) {
+				testLabels.push_back(8);
+			}
+			else if (file.find("surprised") != std::string::npos) {
+				testLabels.push_back(9);
+			}*/
 		}
 	}
+
+	Mat features;
+	hconcat(apparenceFeatures, geometricFeatures, features);
 
 	int predMLP, predSVM;
 	int truthMLP, truthSVM;
 	Mat resultMLP, resultSVM;
 	Mat confusionMLP(nclasses, nclasses, CV_32S, Scalar(0));
 	Mat confusionSVM(nclasses, nclasses, CV_32S, Scalar(0));
-	for (int i = 0; i < testData.rows; i++) {
-		predMLP = ann->predict(testData.row(i), resultMLP);
-		predSVM = svm->predict(testData.row(i), resultSVM);
+
+	for (int i = 0; i < geometricFeatures.rows; i++) {
+		predMLP = annGeometric->predict(geometricFeatures.row(i), resultMLP);
+		predSVM = svmGeometric->predict(geometricFeatures.row(i), resultSVM);
 		predSVM = (int) resultSVM.at<float>(0,0);
 		truthMLP = testLabels.at<int>(i);
 		truthSVM = testLabels.at<int>(i);
 		confusionMLP.at<int>(predMLP, truthMLP)++;
 		confusionSVM.at<int>(predSVM, truthSVM)++;
 
-		//cout << "cont: " << i << endl;
-		//std::cout << "pred: " << predMLP << "     pred SVM: " << predSVM << std::endl;
-		//cout << "truth: " << truthMLP << "     truth SVM" << truthSVM << endl;
-		//cout << "confusion: \n" << confusionMLP << endl << endl;
-		//cout << "confusionsvm: \n" << confusionSVM << endl << endl;
-		//cout  << resultMLP << endl << endl;
-		//cout << resultSVM << endl << endl;
 	}
-
 
 	Mat correct = confusionMLP.diag();
 	float accuracyMLP = sum(correct)[0] / sum(confusionMLP)[0];
-	std::cerr << "accuracy: " << accuracyMLP << std::endl;
+	std::cerr << "GEOMETRIC: " << std::endl;
+	std::cerr << "accuracyMLP: " << accuracyMLP << std::endl;
 	std::cerr << "confusion:\n " << confusionMLP << std::endl;
 
 	Mat correctSVM = confusionSVM.diag();
 	float accuracySVM = sum(correctSVM)[0] / sum(confusionSVM)[0];
+	std::cerr << "accuracySVM: " << accuracySVM << std::endl;
+	std::cerr << "confusionSVM:\n " << confusionSVM << std::endl;
+
+
+	confusionMLP =  Mat::zeros(nclasses, nclasses, CV_32S);
+	confusionSVM =  Mat::zeros(nclasses, nclasses, CV_32S);
+
+
+	for (int i = 0; i < apparenceFeatures.rows; i++) {
+		predMLP = annApparence->predict(apparenceFeatures.row(i), resultMLP);
+		predSVM = svmApparence->predict(apparenceFeatures.row(i), resultSVM);
+		predSVM = (int)resultSVM.at<float>(0, 0);
+		truthMLP = testLabels.at<int>(i);
+		truthSVM = testLabels.at<int>(i);
+		confusionMLP.at<int>(predMLP, truthMLP)++;
+		confusionSVM.at<int>(predSVM, truthSVM)++;
+
+	}
+
+	correct = confusionMLP.diag();
+	accuracyMLP = sum(correct)[0] / sum(confusionMLP)[0];
+	std::cerr << "APPARENCE: " << std::endl;
+	std::cerr << "accuracyMLP: " << accuracyMLP << std::endl;
+	std::cerr << "confusion:\n " << confusionMLP << std::endl;
+
+	correctSVM = confusionSVM.diag();
+	accuracySVM = sum(correctSVM)[0] / sum(confusionSVM)[0];
+	std::cerr << "accuracySVM: " << accuracySVM << std::endl;
+	std::cerr << "confusionSVM:\n " << confusionSVM << std::endl;
+
+
+	confusionMLP =  Mat::zeros(nclasses, nclasses, CV_32S);
+	confusionSVM =  Mat::zeros(nclasses, nclasses, CV_32S);
+
+	for (int i = 0; i < features.rows; i++) {
+		predMLP = ann->predict(features.row(i), resultMLP);
+		predSVM = svm->predict(features.row(i), resultSVM);
+		predSVM = (int)resultSVM.at<float>(0, 0);
+		truthMLP = testLabels.at<int>(i);
+		truthSVM = testLabels.at<int>(i);
+		confusionMLP.at<int>(predMLP, truthMLP)++;
+		confusionSVM.at<int>(predSVM, truthSVM)++;
+
+	}
+
+
+	correct = confusionMLP.diag();
+	accuracyMLP = sum(correct)[0] / sum(confusionMLP)[0];
+	std::cerr << "UNION: " << std::endl;
+	std::cerr << "accuracyMLP: " << accuracyMLP << std::endl;
+	std::cerr << "confusion:\n " << confusionMLP << std::endl;
+
+	correctSVM = confusionSVM.diag();
+	accuracySVM = sum(correctSVM)[0] / sum(confusionSVM)[0];
 	std::cerr << "accuracySVM: " << accuracySVM << std::endl;
 	std::cerr << "confusionSVM:\n " << confusionSVM << std::endl;
 }
@@ -256,7 +398,7 @@ cv::Rect detector::dlibRectToOpenCV(dlib::rectangle r)
 void detector::getLandmarks(full_object_detection &flNormalized, DLIBImage dlibImg,dlib::rectangle r) 
 {
 	full_object_detection faceLandmarks = landmarkDetector(dlibImg, r);
-	chip_details chip = get_face_chip_details(faceLandmarks, 128);
+	chip_details chip = get_face_chip_details(faceLandmarks, 200);
 	flNormalized = map_det_to_chip(faceLandmarks, chip);
 
 }
